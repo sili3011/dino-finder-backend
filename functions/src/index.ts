@@ -8,7 +8,7 @@ import * as express from "express";
 import * as cors from "cors";
 
 const allDinosURL =
-  "https://paleobiodb.org/data1.2/occs/list.json?base_name=Dinosauria&show=coords";
+  "https://paleobiodb.org/data1.2/occs/list.json?base_name=Dinosauria&show=class,coords";
 const tmpDinos = "/tmp/dinos.json";
 
 let admin: firebaseAdmin.app.App;
@@ -46,11 +46,13 @@ export const collectData = functions
     const rawData = fs.readFileSync(tmpDinos);
     const parsedData = JSON.parse(rawData.toString("utf-8"));
 
-    const cleanedData = parsedData.records.map((dino: any) => ({
-      oid: dino.oid,
-      lat: dino.lat,
-      lng: dino.lng,
-    }));
+    const cleanedData = parsedData.records
+      .filter((x: any) => x.cll.toLowerCase() !== "aves")
+      .map((dino: any) => ({
+        oid: dino.oid,
+        lat: dino.lat,
+        lng: dino.lng,
+      }));
 
     await fs.writeFileSync(tmpDinos, JSON.stringify(cleanedData));
 
