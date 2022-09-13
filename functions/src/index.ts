@@ -84,7 +84,6 @@ endpoints.get("/dinos", async (request, response) => {
   if (!admin) {
     _initializeApp(process.env.SERVICE_ACCOUNT!);
   }
-
   response.set("Chached-Control", "public, max-age=300, s-maxage=600");
   response.set("Access-Control-Allow-Origin", "*");
   try {
