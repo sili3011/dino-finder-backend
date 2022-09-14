@@ -7,9 +7,10 @@ import * as fs from "fs";
 import * as express from "express";
 import * as cors from "cors";
 
-const allDinosURL =
+const allDigsURL =
   "https://paleobiodb.org/data1.2/occs/list.json?base_name=Dinosauria&show=class,coords";
-const tmpDinos = "/tmp/dinos.json";
+const tmpDigs = "/tmp/digs.json";
+const tmpDinoTypes = "/tmp/dino-types.json";
 
 let admin: firebaseAdmin.app.App;
 
@@ -29,21 +30,21 @@ export const collectData = functions
       }
     });
 
-    const output = path.resolve(tmpDinos);
+    const output = path.resolve(tmpDigs);
     const outputStream = fs.createWriteStream(output);
 
     await new Promise<void>((resolve) =>
-      request(allDinosURL, async (error) => {
+      request(allDigsURL, async (error) => {
         if (error) {
           console.error(error);
         } else {
-          console.log("Successfully downloaded dinos.json!");
+          console.log("Successfully downloaded digs.json!");
           resolve();
         }
       }).pipe(outputStream)
     );
 
-    const rawData = fs.readFileSync(tmpDinos);
+    const rawData = fs.readFileSync(tmpDigs);
     const parsedData = JSON.parse(rawData.toString("utf-8"));
 
     const cleanedData = parsedData.records
@@ -52,20 +53,48 @@ export const collectData = functions
         oid: dino.oid,
         lat: dino.lat,
         lng: dino.lng,
+        tna: dino.tna,
       }));
 
-    await fs.writeFileSync(tmpDinos, JSON.stringify(cleanedData));
+    const allTypes = [
+      ...new Set(cleanedData.map((dino: any) => dino.tna)),
+    ].sort();
+
+    await fs.writeFileSync(tmpDigs, JSON.stringify(cleanedData));
 
     await admin
       .storage()
       .bucket()
-      .upload(tmpDinos)
+      .upload(tmpDigs)
       .then(async () => {
         console.log("Upload successfull!");
-        await fs.exists(tmpDinos, async (exists) => {
+        await fs.exists(tmpDigs, async (exists) => {
           if (exists) {
             try {
-              await fs.unlink(tmpDinos, (error) => {
+              await fs.unlink(tmpDigs, (error) => {
+                if (error) {
+                  console.error(error);
+                }
+              });
+            } catch (e) {
+              console.error(e);
+            }
+          }
+        });
+      });
+
+    await fs.writeFileSync(tmpDinoTypes, JSON.stringify(allTypes));
+
+    await admin
+      .storage()
+      .bucket()
+      .upload(tmpDinoTypes)
+      .then(async () => {
+        console.log("Upload successfull!");
+        await fs.exists(tmpDinoTypes, async (exists) => {
+          if (exists) {
+            try {
+              await fs.unlink(tmpDinoTypes, (error) => {
                 if (error) {
                   console.error(error);
                 }
@@ -82,48 +111,67 @@ const endpoints = express();
 
 endpoints.use(cors({ origin: true }));
 
-endpoints.get("/dinos", async (request, response) => {
+endpoints.get("/digs", async (request, response) => {
   if (!admin) {
     _initializeApp(process.env.SERVICE_ACCOUNT!);
   }
   response.set("Chached-Control", "public, max-age=300, s-maxage=600");
   response.set("Access-Control-Allow-Origin", "*");
   try {
-    await fs.exists("/tmp", (exists) => {
-      if (!exists) {
-        fs.mkdir("/tmp", () => {
-          console.log("Successfully created tmp.");
-        });
-      }
-    });
-    const fileName = tmpDinos;
-    const file = await firebaseAdmin.storage().bucket().file("dinos.json");
-    await new Promise<void>((resolve) =>
-      file
-        .createReadStream()
-        .on("error", function (err) {
-          console.error(err);
-        })
-        .on("end", function () {
-          resolve();
-        })
-        .pipe(fs.createWriteStream(fileName))
-    );
-    const dinos = await new Promise<void>((resolve) =>
-      fs.readFile(fileName, undefined, async (error, data) => {
-        if (error) {
-          console.error(error);
-        } else {
-          await fs.unlinkSync(fileName);
-          resolve(JSON.parse(data.toString()));
-        }
-      })
-    );
-    response.json(dinos);
+    response.json(await _getJSON("digs"));
   } catch (error) {
     console.error(error);
   }
 });
+
+endpoints.get("/dino-types", async (request, response) => {
+  if (!admin) {
+    _initializeApp(process.env.SERVICE_ACCOUNT!);
+  }
+  response.set("Chached-Control", "public, max-age=300, s-maxage=600");
+  response.set("Access-Control-Allow-Origin", "*");
+  try {
+    response.json(await _getJSON("dino-types"));
+  } catch (error) {
+    console.error(error);
+  }
+});
+
+async function _getJSON(name: string): Promise<JSON> {
+  await fs.exists("/tmp", (exists) => {
+    if (!exists) {
+      fs.mkdir("/tmp", () => {
+        console.log("Successfully created tmp.");
+      });
+    }
+  });
+  const fileName = tmpDigs;
+  const file = await firebaseAdmin
+    .storage()
+    .bucket()
+    .file(name + ".json");
+  await new Promise<void>((resolve) =>
+    file
+      .createReadStream()
+      .on("error", function (err) {
+        console.error(err);
+      })
+      .on("end", function () {
+        resolve();
+      })
+      .pipe(fs.createWriteStream(fileName))
+  );
+  return await new Promise<JSON>((resolve) =>
+    fs.readFile(fileName, undefined, async (error, data) => {
+      if (error) {
+        console.error(error);
+      } else {
+        await fs.unlinkSync(fileName);
+        resolve(JSON.parse(data.toString()));
+      }
+    })
+  );
+}
 
 export const api = functions
   .runWith({ memory: "8GB", timeoutSeconds: 540, secrets: ["SERVICE_ACCOUNT"] })
