@@ -10,7 +10,6 @@ import * as cors from "cors";
 const allDigsURL =
   "https://paleobiodb.org/data1.2/occs/list.json?base_name=Dinosauria&show=class,coords";
 const tmpDigs = "/tmp/digs.json";
-const tmpDinoTypes = "/tmp/dino-types.json";
 
 let admin: firebaseAdmin.app.App;
 
@@ -56,10 +55,6 @@ export const collectData = functions
         tna: dino.tna,
       }));
 
-    const allTypes = [
-      ...new Set(cleanedData.map((dino: any) => dino.tna)),
-    ].sort();
-
     await fs.writeFileSync(tmpDigs, JSON.stringify(cleanedData));
 
     await admin
@@ -72,29 +67,6 @@ export const collectData = functions
           if (exists) {
             try {
               await fs.unlink(tmpDigs, (error) => {
-                if (error) {
-                  console.error(error);
-                }
-              });
-            } catch (e) {
-              console.error(e);
-            }
-          }
-        });
-      });
-
-    await fs.writeFileSync(tmpDinoTypes, JSON.stringify(allTypes));
-
-    await admin
-      .storage()
-      .bucket()
-      .upload(tmpDinoTypes)
-      .then(async () => {
-        console.log("Upload successfull!");
-        await fs.exists(tmpDinoTypes, async (exists) => {
-          if (exists) {
-            try {
-              await fs.unlink(tmpDinoTypes, (error) => {
                 if (error) {
                   console.error(error);
                 }
@@ -119,19 +91,6 @@ endpoints.get("/digs", async (request, response) => {
   response.set("Access-Control-Allow-Origin", "*");
   try {
     response.json(await _getJSON("digs"));
-  } catch (error) {
-    console.error(error);
-  }
-});
-
-endpoints.get("/dino-types", async (request, response) => {
-  if (!admin) {
-    _initializeApp(process.env.SERVICE_ACCOUNT!);
-  }
-  response.set("Chached-Control", "public, max-age=300, s-maxage=600");
-  response.set("Access-Control-Allow-Origin", "*");
-  try {
-    response.json(await _getJSON("dino-types"));
   } catch (error) {
     console.error(error);
   }
