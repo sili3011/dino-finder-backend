@@ -8,7 +8,7 @@ import * as express from "express";
 import * as cors from "cors";
 
 const allDigsURL =
-  "https://paleobiodb.org/data1.2/occs/list.json?base_name=Dinosauria&show=class,coords";
+  "https://paleobiodb.org/data1.2/occs/list.json?base_name=Avemetatarsalia&show=class,coords";
 const tmpDigs = "/tmp/digs.json";
 
 let admin: firebaseAdmin.app.App;
